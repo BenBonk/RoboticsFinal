@@ -1,0 +1,28 @@
+services:
+  ros:
+    build: .
+    command: tail -f /dev/null
+    volumes: 
+      - ./csci_420_robotics_labs:/root/csci_420_robotics_labs/
+    environment:
+      - DISPLAY=novnc:0.0
+    networks:
+      - x11
+    hostname: ros_docker
+    depends_on:
+      - novnc
+  novnc:  
+    image: theasp/novnc:latest
+    volumes:
+      - ./csci_420_robotics_labs:/root/csci_420_robotics_labs/
+    environment:
+      - DISPLAY_WIDTH=2840
+      - DISPLAY_HEIGHT=1800
+      - RUN_XTERM=no
+    ports:
+      - "8080:8080"
+    networks:
+      - x11
+    hostname: novnc_docker
+networks:
+  x11:
