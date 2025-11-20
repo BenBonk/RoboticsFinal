@@ -24,6 +24,7 @@ setup(
     entry_points={
         'console_scripts': [
             'rescue_mission = simple_control.rescue_mission:main',
+            'tower_to_map = simple_control.tower_to_map:main',
         ],
     },
 )

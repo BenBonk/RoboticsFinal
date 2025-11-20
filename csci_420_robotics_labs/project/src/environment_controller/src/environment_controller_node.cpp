@@ -365,8 +365,32 @@ int main(int argc, char **argv) {
     geometry_msgs::msg::Point goal_in_world, goal_in_cell;
     goal_in_world.x = goal_x - map_width / 2.0;
     goal_in_world.y = goal_y - map_height / 2.0;
+   
     goal_in_world.z = 3.0;
     tf2::doTransform(goal_in_world, goal_in_cell, stamped_transform);
+
+        
+    std::cout << "goal_in_world: ("
+          << goal_in_world.x << ", "
+          << goal_in_world.y << ", "
+          << goal_in_world.z << ")" << std::endl;
+
+    std::cout << "goal_in_cell ("
+          << goal_in_cell.x << ", "
+          << goal_in_cell.y << ", "
+          << goal_in_cell.z << ")" << std::endl;
+
+    std::cout << "cell_tower_transform ("
+          << (double)celltower_transform.getOrigin().x() << ", "
+          << (double)celltower_transform.getOrigin().y() << ", "
+          << (double)celltower_transform.getOrigin().z() << ")" << std::endl;
+
+    std::cout << "cell_tower_rotation ("
+          << (double)celltower_transform.getRotation().x() << ", "
+          << (double)celltower_transform.getRotation().y() << ", "
+          << (double)celltower_transform.getRotation().z() << ", "
+          << (double)celltower_transform.getRotation().w() << ")" << std::endl;
+
 
     double ranges[lidar_count];
     double intensities[lidar_count];
