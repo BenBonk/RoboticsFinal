@@ -5,14 +5,11 @@
   <arg name="map_height" default="11" />
   <arg name="seed" default="6" />
 
-  <node pkg="tf2_ros" exec="static_transform_publisher" name="tower_broadcaster" 
-      args="323.349 -991.515 0 0.5318 0 0 world cell_tower"/>
-      <!-- 
-        x = 150 * cos(61 degrees in radians),
-        y = -150 * sin(61 degrees in radians)
-        yaw = (-30 degrees) in radians
-      -->
   <node name="tower_to_map_node" pkg="simple_control" exec="tower_to_map" output="screen"/>
-  <!-- TODO -->
+
+   <!-- planners -->
+  <node name="global_planner_node" pkg="simple_control" exec="global_planner" output="screen"/>
+  <node name="local_planner_node" pkg="simple_control" exec="local_planner" output="screen"/>
+  <node name="mission_planner_node" pkg="simple_control" exec="mission_planner" output="screen"/>
 
 </launch>

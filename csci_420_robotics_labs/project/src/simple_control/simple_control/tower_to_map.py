@@ -38,7 +38,7 @@ class TowerToMap(Node):
         if self.goal:
             try:
                 try:
-                    self.t = self.tf_buffer.lookup_transform('world', 'cell_tower', rclpy.time.Time())
+                    self.t = self.tf_buffer.lookup_transform('cell_tower', 'world', rclpy.time.Time())
                 except TransformException as ex:
                     self.get_logger().info(f'Could not transform world to tower: {ex}')
 
