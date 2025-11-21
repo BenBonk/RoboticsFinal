@@ -9,5 +9,7 @@
 
    <!-- planners -->
 <node pkg="simple_control" exec="global_planner" name="global_planner_node" output="screen" on_exit="shutdown"></node>
+<node pkg="simple_control" exec="local_planner" name="local_planner_node" output="screen" on_exit="shutdown"></node>
+<node pkg="simple_control" exec="mission_planner" name="mission_planner_node" output="screen" on_exit="shutdown"></node>
 
 </launch>

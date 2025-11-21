@@ -1,3 +1,6 @@
+#THIS SCRIPT IS FOR MAP +A* + PATH GENERATION
+
+
 #!/usr/bin/env python
 import copy
 import numpy as np

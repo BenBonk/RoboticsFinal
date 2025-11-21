@@ -31,7 +31,6 @@ class TowerToMap(Node):
         self.get_logger().info('init')
 
     def tower_goal_callback(self, msg):
-        self.get_logger().info(f'Received goal: {msg.x}, {msg.y}, {msg.z}')
         self.goal = msg
 
     def mainloop(self):
