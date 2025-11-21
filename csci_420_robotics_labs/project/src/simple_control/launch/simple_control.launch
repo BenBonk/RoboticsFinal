@@ -8,8 +8,6 @@
   <node name="tower_to_map_node" pkg="simple_control" exec="tower_to_map" output="screen"/>
 
    <!-- planners -->
-  <node name="global_planner_node" pkg="simple_control" exec="global_planner" output="screen"/>
-  <node name="local_planner_node" pkg="simple_control" exec="local_planner" output="screen"/>
-  <node name="mission_planner_node" pkg="simple_control" exec="mission_planner" output="screen"/>
+<node pkg="simple_control" exec="global_planner" name="global_planner_node" output="screen" on_exit="shutdown"></node>
 
 </launch>

@@ -12,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
+        ('lib/' + package_name, ['simple_control/astar_class.py']),
         (os.path.join('share', package_name, 'launch'), glob(os.path.join('launch', '*.*')))
     ],
     install_requires=['setuptools'],
@@ -25,6 +26,7 @@ setup(
         'console_scripts': [
             'rescue_mission = simple_control.rescue_mission:main',
             'tower_to_map = simple_control.tower_to_map:main',
+            'global_planner = simple_control.global_planner:main',
         ],
     },
 )
