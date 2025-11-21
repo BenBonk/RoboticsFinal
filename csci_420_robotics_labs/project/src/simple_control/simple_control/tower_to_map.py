@@ -28,8 +28,6 @@ class TowerToMap(Node):
         self.dt = 1.0 / self.rate
         self.timer = self.create_timer(self.dt, self.mainloop)
 
-        self.get_logger().info('init')
-
     def tower_goal_callback(self, msg):
         self.goal = msg
 
