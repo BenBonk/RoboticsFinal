@@ -24,12 +24,7 @@ class GlobalPlanner(Node):
 
         self.position_pub = self.create_publisher(Vector3, '/uav/input/position_request', 1)
         self.path_pub = self.create_publisher(Int32MultiArray, '/uav/path', 1)
-        qos = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,
-            durability=DurabilityPolicy.TRANSIENT_LOCAL,
-            depth=10
-        )
-        self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.get_map, qos)
+        
         self.requested_position = self.create_subscription(Vector3, '/uav/input/goal', self.get_goal, 10)
         self.at_waypoint_sub = self.create_subscription(Bool, '/uav/sensors/at_waypoint', self.at_waypoint, 10)
 

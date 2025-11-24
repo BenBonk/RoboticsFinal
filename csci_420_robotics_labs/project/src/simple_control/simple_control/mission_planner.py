@@ -13,11 +13,12 @@ from std_msgs.msg import Bool
 # A class to keep track of the quadrotors state
 class DroneState(Enum):
     HOVERING = 1
-    VERIFYING = 2
-    MOVING = 3
+    EXPLORE_WORLD = 2
+    LOCATE_DOOR = 3
+    OPEN_DOOR = 4
+    MOVE_TO_WAYPOINT = 5
+    UPDATE_MAP = 6
 
-
-# Create a class which takes in a position and verifies it, keeps track of the state and publishes commands to a drone
 class MissionPlanner(Node):
 
     # Node initialization
@@ -32,24 +33,14 @@ class MissionPlanner(Node):
 
         self.acceptance_range = 0.5
        
-        # Create the drones state as hovering
         self.state = DroneState.HOVERING
         self.get_logger().info("Current State: HOVERING")
-        # Create the goal messages we are going to be sending
         self.goal_cmd = Vector3()
 
-        self.unverified_goal_cmd = Vector3()
-
-        # Create a point message that saves the drones current position
         self.drone_position = Point()
-
-        # Start the drone a little bit off the ground
         self.goal_cmd.z = 3.0
-
-        # Keeps track of whether the goal  position was changed or not
         self.goal_changed = False
 
-        # Set the timer to call the mainloop of our class
         self.rate = 20
         self.dt = 1.0 / self.rate
         self.timer = self.create_timer(self.dt, self.mainloop)
@@ -57,10 +48,8 @@ class MissionPlanner(Node):
 
     # Callback for the keyboard manager
     def getPositionRequest(self, msg):
-        # Save the keyboard command
         if self.state == DroneState.HOVERING:
             self.goal_changed = True
-            self.unverified_goal_cmd = copy.deepcopy(msg)
 
     def get_gps(self, msg):
         self.drone_position = msg.pose.position
@@ -72,19 +61,12 @@ class MissionPlanner(Node):
         pos_str += ", " + str(msg.z) + ")"
         return pos_str
 
-
-    def processVerifying(self):
-        self.state = DroneState.MOVING
-        self.goal_cmd = self.unverified_goal_cmd
-
-
     # This function is called when we are in the hovering state
     def processHovering(self):
         # Print the requested goal if the position changed
         if self.goal_changed:
-            self.state = DroneState.VERIFYING
+            self.state = DroneState.HOVERING
             self.goal_changed = False
-
 
     # This function is called when we are in the moving state
     def processMoving(self):
@@ -107,14 +89,10 @@ class MissionPlanner(Node):
         # Publish the position
         self.position_pub.publish(self.goal_cmd)
 
-        # Check if the drone is in a moving state
-        if self.state == DroneState.MOVING:
+        if self.state == DroneState.HOVERING:
             self.processMoving()
-        # If we are hovering then accept keyboard commands
         elif self.state == DroneState.HOVERING:
             self.processHovering()
-        elif self.state == DroneState.VERIFYING:
-            self.processVerifying()
 
         # Euclidean distance
         dx = self.goal_cmd.x - self.drone_position.x
@@ -123,6 +101,7 @@ class MissionPlanner(Node):
         bool = Bool()
         bool.data = True if (distance_to_goal < self.acceptance_range) else False
         self.at_goal_pub.publish(bool)
+
 def main():
     rclpy.init()
     try:
