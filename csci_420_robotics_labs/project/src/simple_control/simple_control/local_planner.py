@@ -1,3 +1,5 @@
+#THIS SCRIPT IS FOR COLLISION AVOIDANCE AND DISCOVERING THE MAP
+
 #!/usr/bin/env python3
 import numpy as np
 import rclpy
@@ -54,7 +56,6 @@ class LocalPlanner(Node):
     def gps_callback(self, msg):
         self.robot_x = msg.x
         self.robot_y = msg.y
-        # Yaw stays 0 per project assumptions
 
     def world_to_grid(self, x, y):
         # we have to do this because grid and world coords are different
@@ -90,6 +91,21 @@ class LocalPlanner(Node):
             angle += msg.angle_increment
 
         self.publish_grid()
+
+    def mark_closed_door(self, x, y):
+        cell = self.world_to_grid(x, y)
+        if cell is not None:
+            self.grid[cell] = -1
+
+    def mark_open_door(self, x, y):
+        cell = self.world_to_grid(x, y)
+        if cell is not None:
+            self.grid[cell] = -2
+
+    def mark_goal(self, x, y):
+        cell = self.world_to_grid(x, y)
+        if cell is not None:
+            self.grid[cell] = -3
 
     def publish_grid(self):
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
