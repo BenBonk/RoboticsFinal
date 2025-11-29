@@ -40,8 +40,8 @@ class MissionPlanner(Node):
 
         # key stuff
         self.keys_remaining = 4
-        self.get_keys_sub = self.create_subscription(Int32, '/uav/input/position_request',self.get_keys_remaining, 1)
-        self.use_key_pub = self.create_publisher(Point, '/uav/input/position_request', 1)
+        self.get_keys_sub = self.create_subscription(Int32, '/keys_remaining',self.get_keys_remaining, 1)
+        self.use_key_pub = self.create_publisher(Point, 'use_key', 1)
 
         self.rate = 20
         self.dt = 1.0 / self.rate

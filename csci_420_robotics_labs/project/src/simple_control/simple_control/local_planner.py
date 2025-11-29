@@ -73,20 +73,24 @@ class LocalPlanner(Node):
                 angle += msg.angle_increment
                 continue
 
+            # Calculate hit position
             hit_x = self.robot_x + r * np.cos(angle)
             hit_y = self.robot_y + r * np.sin(angle)
 
-            steps = int(r / self.resolution)
-            for i in range(steps):
-                px = self.robot_x + (i * self.resolution) * np.cos(angle)
-                py = self.robot_y + (i * self.resolution) * np.sin(angle)
+            # Ray trace to mark free space - use smaller steps
+            num_steps = max(1, int(r / (self.resolution * 0.5)))  # More granular
+            for i in range(num_steps):
+                t = i / num_steps  # Interpolation factor from 0 to 1
+                px = self.robot_x + t * r * np.cos(angle)
+                py = self.robot_y + t * r * np.sin(angle)
                 idx = self.world_to_grid(px, py)
-                if idx is not None:
-                    self.grid[idx] = max(0, self.grid[idx] - 5)  # more certain free
+                if idx is not None and self.grid[idx] >= 0:  # Don't override special values
+                    self.grid[idx] = max(0, self.grid[idx] - 5)
 
+            # Mark obstacle at hit point
             idx = self.world_to_grid(hit_x, hit_y)
             if idx is not None:
-                self.grid[idx] = min(100, self.grid[idx] + 10)  # more certain occupied
+                self.grid[idx] = min(100, self.grid[idx] + 10)
 
             angle += msg.angle_increment
 

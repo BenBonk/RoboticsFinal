@@ -22,7 +22,7 @@ class GlobalPlanner(Node):
         self.origin_x = None
         self.origin_y = None
 
-        self.position_pub = self.create_publisher(Vector3, '/uav/input/position_request', 1)
+        self.position_pub = self.create_publisher(Vector3, '/uav/input/position', 1)
         self.path_pub = self.create_publisher(Int32MultiArray, '/uav/path', 1)
         
         self.requested_position = self.create_subscription(Vector3, '/uav/input/goal', self.get_goal, 10)
