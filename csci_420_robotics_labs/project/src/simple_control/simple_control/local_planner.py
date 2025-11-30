@@ -32,6 +32,10 @@ class LocalPlanner(Node):
 
         # create occupancy grid initialized to 50
         self.grid = [50] * (self.map_width * self.map_height)
+        
+        self.max_n_readings = 100 # number of readings until code decides what is correct
+        self.n_readings = 999
+        self.reset_lidar_readings()
 
         # setup OccupancyGrid message
         self.og_msg = OccupancyGrid()
@@ -43,15 +47,29 @@ class LocalPlanner(Node):
         self.og_msg.info.origin.position.y = -self.map_height * self.resolution / 2
 
         #some thing that the pub needs for some reason
+        # lol what
         qos = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             durability=DurabilityPolicy.TRANSIENT_LOCAL,
             depth=1
         )
 
+        # Tower goal subscriber to topic /uav/input/goal
+        # will wait until something is published here
+        self.goal_sub = self.create_subscription(
+            Vector3,
+            '/uav/input/goal',
+            self.transformed_goal_callback,
+            10
+        )
+        self.goal = None
+
         self.map_pub = self.create_publisher(OccupancyGrid, '/map', qos)
-        self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 10)
-        self.gps_sub = self.create_subscription(Vector3, '/uav/sensors/gps', self.gps_callback, 10)
+        self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 1)
+        self.gps_sub = self.create_subscription(Vector3, '/uav/sensors/gps', self.gps_callback, 5)
+
+    def transformed_goal_callback(self, msg: Vector3):
+        self.mark_goal(msg.x, msg.y)
 
     def gps_callback(self, msg):
         self.robot_x = msg.x
@@ -64,35 +82,78 @@ class LocalPlanner(Node):
         if gx < 0 or gy < 0 or gx >= self.map_width or gy >= self.map_height:
             return None
         return gy * self.map_width + gx
+    
+    def reset_lidar_readings(self):
+        # intensities will always be the same, just need
+        # to make sure the distance reading is correct
+        self.lidar_ranges = np.empty((16, self.max_n_readings), np.float32)
+        self.n_readings = 0
 
     def lidar_callback(self, msg):
-        angle = msg.angle_min
+        if self.n_readings >= self.max_n_readings:
+            return # trash
+        
+        # kind of spaghetti but assuming these don't change this is probably fine
+        self.angle_min = msg.angle_min
+        self.range_max = msg.range_max
+        self.angle_increment = msg.angle_increment
 
-        for r in msg.ranges:
-            if np.isinf(r) or r <= 0:
-                angle += msg.angle_increment
-                continue
+        self.lidar_ranges[:, self.n_readings] = np.array(msg.ranges)
+        self.n_readings += 1
+        # update og if number of readings is reached
+        if self.n_readings == self.max_n_readings:
+            self.update_occupancy_grid()
+
+    def update_occupancy_grid(self):
+        ranges = np.mean(self.lidar_ranges, axis=1)
+        # calculate noise of each range
+        readings = np.where(
+            np.isfinite(self.lidar_ranges) & (self.lidar_ranges > 0), # valid readings are >0 and not infinite
+            self.lidar_ranges,
+            np.nan
+        )
+        noise = np.nanstd(readings, axis=1) # noise ingnoring nan values
+        
+        # figure out baseline noise, assume doors will not cover >70% of readings
+        noise_sorted = np.sort(noise)
+        baseline = np.average(
+            noise_sorted[:(int)(self.max_n_readings * 16 * 0.3)]
+        )
+        # doors have 10x baseline noise, set threshold to 5
+        door_readings = np.where(noise > 5 * baseline)[0]
+
+        angle = self.angle_min
+        range_max = self.range_max
+
+        for n, r in enumerate(ranges):
+            out_of_range = np.isinf(r) # if nothing detected, r is infinity
+            r = min(r, range_max)
 
             # Calculate hit position
-            hit_x = self.robot_x + r * np.cos(angle)
-            hit_y = self.robot_y + r * np.sin(angle)
+            hit_x = self.robot_x + (r+0.3) * np.cos(angle)
+            hit_y = self.robot_y + (r+0.3) * np.sin(angle)
 
-            # Ray trace to mark free space - use smaller steps
-            num_steps = max(1, int(r / (self.resolution * 0.5)))  # More granular
-            for i in range(num_steps):
-                t = i / num_steps  # Interpolation factor from 0 to 1
-                px = self.robot_x + t * r * np.cos(angle)
-                py = self.robot_y + t * r * np.sin(angle)
+           # Ray trace to mark free space
+            incr = 0.2
+
+            for sub in np.arange(0, r, incr):
+                px = self.robot_x + sub * np.cos(angle)
+                py = self.robot_y + sub * np.sin(angle)
                 idx = self.world_to_grid(px, py)
                 if idx is not None and self.grid[idx] >= 0:  # Don't override special values
-                    self.grid[idx] = max(0, self.grid[idx] - 5)
+                    v = self.grid[idx]
+                    self.grid[idx] = 0 * 0.1 + v * 0.9  # (still 0.9*v)
 
-            # Mark obstacle at hit point
-            idx = self.world_to_grid(hit_x, hit_y)
-            if idx is not None:
-                self.grid[idx] = min(100, self.grid[idx] + 10)
+            if not out_of_range:
+                # Mark obstacle at hit point
+                idx = self.world_to_grid(hit_x, hit_y)
+                if idx is not None:
+                    if n in door_readings: # door
+                        self.grid[idx] = -1
+                    else: # obstacle
+                        self.grid[idx] = (100) * 0.8 + (v) * 0.2
 
-            angle += msg.angle_increment
+            angle += self.angle_increment
 
         self.publish_grid()
 
@@ -113,7 +174,7 @@ class LocalPlanner(Node):
 
     def publish_grid(self):
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
-        self.og_msg.data = self.grid
+        self.og_msg.data = [int(v) for v in self.grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)
 
     def mainloop(self):
