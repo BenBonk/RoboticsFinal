@@ -53,7 +53,6 @@ class TowerToMap(Node):
                 msg.y = new_point.point.y
                 msg.z = new_point.point.z
                 
-                self.get_logger().info(f'Publishing Transformed Goal: {msg.x}, {msg.y}')
                 self.goal_pub.publish(msg)
 
                 self.goal = None

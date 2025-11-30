@@ -60,7 +60,7 @@ class LocalPlanner(Node):
             Vector3,
             '/uav/input/goal',
             self.transformed_goal_callback,
-            10
+            1
         )
         self.goal = None
 
@@ -68,7 +68,11 @@ class LocalPlanner(Node):
         self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 1)
         self.gps_sub = self.create_subscription(Vector3, '/uav/sensors/gps', self.gps_callback, 5)
 
-    def transformed_goal_callback(self, msg: Vector3):
+        self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
+        self.debug_cell(3.5,3.5)
+
+    def transformed_goal_callback(self, msg):
+        self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
         self.mark_goal(msg.x, msg.y)
 
     def gps_callback(self, msg):
@@ -83,8 +87,16 @@ class LocalPlanner(Node):
             return None
         return gy * self.map_width + gx
     
+    def debug_cell(self, x, y):
+        idx = self.world_to_grid(x, y)
+        self.get_logger().info(f"world ({x},{y}) -> grid index {idx}")
+        if idx is not None:
+            gx = idx % self.map_width
+            gy = idx // self.map_width
+            self.get_logger().info(f"grid coords: gx={gx}, gy={gy}")
+
     def reset_lidar_readings(self):
-        # intensities will always be the same, just need
+        # intensities will always be the sfmarkame, just need
         # to make sure the distance reading is correct
         self.lidar_ranges = np.empty((16, self.max_n_readings), np.float32)
         self.n_readings = 0
@@ -106,52 +118,49 @@ class LocalPlanner(Node):
 
     def update_occupancy_grid(self):
         ranges = np.mean(self.lidar_ranges, axis=1)
-        # calculate noise of each range
         readings = np.where(
-            np.isfinite(self.lidar_ranges) & (self.lidar_ranges > 0), # valid readings are >0 and not infinite
+            np.isfinite(self.lidar_ranges) & (self.lidar_ranges > 0),
             self.lidar_ranges,
             np.nan
         )
-        noise = np.nanstd(readings, axis=1) # noise ingnoring nan values
+        noise = np.nanstd(readings, axis=1)
         
-        # figure out baseline noise, assume doors will not cover >70% of readings
         noise_sorted = np.sort(noise)
-        baseline = np.average(
-            noise_sorted[:(int)(self.max_n_readings * 16 * 0.3)]
-        )
-        # doors have 10x baseline noise, set threshold to 5
+        baseline = np.average(noise_sorted[:int(len(noise_sorted) * 0.3)])
+        
         door_readings = np.where(noise > 5 * baseline)[0]
 
         angle = self.angle_min
         range_max = self.range_max
 
         for n, r in enumerate(ranges):
-            out_of_range = np.isinf(r) # if nothing detected, r is infinity
+            out_of_range = np.isinf(r)
             r = min(r, range_max)
 
-            # Calculate hit position
             hit_x = self.robot_x + (r+0.3) * np.cos(angle)
             hit_y = self.robot_y + (r+0.3) * np.sin(angle)
 
-           # Ray trace to mark free space
+            # Ray trace to mark free space
             incr = 0.2
-
             for sub in np.arange(0, r, incr):
                 px = self.robot_x + sub * np.cos(angle)
                 py = self.robot_y + sub * np.sin(angle)
                 idx = self.world_to_grid(px, py)
-                if idx is not None and self.grid[idx] >= 0:  # Don't override special values
+                # Protect ALL special values (negative values)
+                if idx is not None and self.grid[idx] >= 0:
                     v = self.grid[idx]
-                    self.grid[idx] = 0 * 0.1 + v * 0.9  # (still 0.9*v)
+                    self.grid[idx] = 0 * 0.1 + v * 0.9
 
             if not out_of_range:
                 # Mark obstacle at hit point
                 idx = self.world_to_grid(hit_x, hit_y)
-                if idx is not None:
-                    if n in door_readings: # door
+                # Also protect special values here
+                if idx is not None and self.grid[idx] >= 0:
+                    if n in door_readings:  # door
                         self.grid[idx] = -1
-                    else: # obstacle
-                        self.grid[idx] = (100) * 0.8 + (v) * 0.2
+                    else:  # obstacle
+                        current_val = self.grid[idx]
+                        self.grid[idx] = 100 * 0.8 + current_val * 0.2
 
             angle += self.angle_increment
 
@@ -161,21 +170,26 @@ class LocalPlanner(Node):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.grid[cell] = -1
+            self.publish_grid()
 
     def mark_open_door(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.grid[cell] = -2
+            self.publish_grid()
 
     def mark_goal(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.grid[cell] = -3
+            self.publish_grid()
 
     def publish_grid(self):
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
         self.og_msg.data = [int(v) for v in self.grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)
+        self.get_logger().info("publish grid")
+
 
     def mainloop(self):
         pass
