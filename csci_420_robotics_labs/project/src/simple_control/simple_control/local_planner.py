@@ -70,6 +70,9 @@ class LocalPlanner(Node):
 
         self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
         self.print_occupancy_grid()
+        #PROOF WORLD TO GRID IS WRONG
+        goal_pos = self.world_to_grid(3.5,3.5)
+        self.occupancy_grid[goal_pos] = -3
 
     def transformed_goal_callback(self, msg):
         self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
@@ -174,6 +177,7 @@ class LocalPlanner(Node):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.occupancy_grid[cell] = -3
+            self.get_logger().info(f"set goal at cell:{cell}")
             self.publish_grid()
 
     def array_to_grid(self,occupancy_grid):
