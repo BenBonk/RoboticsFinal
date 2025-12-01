@@ -31,7 +31,7 @@ class LocalPlanner(Node):
         self.robot_y = 0.0
 
         # create occupancy grid initialized to 50
-        self.grid = [50] * (self.map_width * self.map_height)
+        self.occupancy_grid = [50] * (self.map_width * self.map_height)
         
         self.max_n_readings = 100 # number of readings until code decides what is correct
         self.n_readings = 999
@@ -69,7 +69,7 @@ class LocalPlanner(Node):
         self.gps_sub = self.create_subscription(Vector3, '/uav/sensors/gps', self.gps_callback, 5)
 
         self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
-        self.debug_cell(3.5,3.5)
+        self.print_occupancy_grid()
 
     def transformed_goal_callback(self, msg):
         self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
@@ -86,14 +86,6 @@ class LocalPlanner(Node):
         if gx < 0 or gy < 0 or gx >= self.map_width or gy >= self.map_height:
             return None
         return gy * self.map_width + gx
-    
-    def debug_cell(self, x, y):
-        idx = self.world_to_grid(x, y)
-        self.get_logger().info(f"world ({x},{y}) -> grid index {idx}")
-        if idx is not None:
-            gx = idx % self.map_width
-            gy = idx // self.map_width
-            self.get_logger().info(f"grid coords: gx={gx}, gy={gy}")
 
     def reset_lidar_readings(self):
         # intensities will always be the sfmarkame, just need
@@ -147,20 +139,20 @@ class LocalPlanner(Node):
                 py = self.robot_y + sub * np.sin(angle)
                 idx = self.world_to_grid(px, py)
                 # Protect ALL special values (negative values)
-                if idx is not None and self.grid[idx] >= 0:
-                    v = self.grid[idx]
-                    self.grid[idx] = 0 * 0.1 + v * 0.9
+                if idx is not None and self.occupancy_grid[idx] >= 0:
+                    v = self.occupancy_grid[idx]
+                    self.occupancy_grid[idx] = 0 * 0.1 + v * 0.9
 
             if not out_of_range:
                 # Mark obstacle at hit point
                 idx = self.world_to_grid(hit_x, hit_y)
                 # Also protect special values here
-                if idx is not None and self.grid[idx] >= 0:
+                if idx is not None and self.occupancy_grid[idx] >= 0:
                     if n in door_readings:  # door
-                        self.grid[idx] = -1
+                        self.occupancy_grid[idx] = -1
                     else:  # obstacle
-                        current_val = self.grid[idx]
-                        self.grid[idx] = 100 * 0.8 + current_val * 0.2
+                        current_val = self.occupancy_grid[idx]
+                        self.occupancy_grid[idx] = 100 * 0.8 + current_val * 0.2
 
             angle += self.angle_increment
 
@@ -169,28 +161,50 @@ class LocalPlanner(Node):
     def mark_closed_door(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
-            self.grid[cell] = -1
+            self.occupancy_grid[cell] = -1
             self.publish_grid()
 
     def mark_open_door(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
-            self.grid[cell] = -2
+            self.occupancy_grid[cell] = -2
             self.publish_grid()
 
     def mark_goal(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
-            self.grid[cell] = -3
+            self.occupancy_grid[cell] = -3
             self.publish_grid()
 
+    def array_to_grid(self,occupancy_grid):
+        #converts the occupancy grid to a 2d array
+        w = int(occupancy_grid.info.width)
+        h = int(occupancy_grid.info.height)
+        data = np.array(occupancy_grid.data, dtype=np.int8).reshape((h, w))
+        return data
+
+    #only needed if we want to change the rest of the implementation
+    def grid_to_array(self, grid):
+        flat = []
+        for r in range(self.map_height):
+            flat.extend(grid[r])
+
+        self.og_msg.data = [int(v) for v in flat]
+        return self.og_msg
+
+    def print_occupancy_grid(self):
+        h = self.map_height
+        w = self.map_width
+        arr = np.array(self.occupancy_grid, dtype=np.int8).reshape((h, w))
+        self.get_logger().info("\n" + np.array2string(arr))
+
     def publish_grid(self):
-        #self.get_logger().info([int(v) for v in self.grid])
+        self.print_occupancy_grid()
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
-        self.og_msg.data = [int(v) for v in self.grid] #need to convert to ints for publishing
+        self.og_msg.data = [int(v) for v in self.occupancy_grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)
         self.get_logger().info("publish grid")
-
+    
 
     def mainloop(self):
         pass
