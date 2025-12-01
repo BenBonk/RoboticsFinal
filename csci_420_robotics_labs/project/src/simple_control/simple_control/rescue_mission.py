@@ -187,6 +187,7 @@ class RescueMission(Node):
     def transformed_goal_callback(self, msg: Vector3):
         self.goal = msg
         self.get_logger().info('Recieved goal from tower to map')
+        #WE GOTTA UPDATE THE MAP TO MARK GOAL
 
 
 def main():

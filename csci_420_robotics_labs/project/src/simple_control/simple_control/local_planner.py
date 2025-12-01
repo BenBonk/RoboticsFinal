@@ -43,8 +43,8 @@ class LocalPlanner(Node):
         self.og_msg.info.resolution = self.resolution
         self.og_msg.info.width = self.map_width
         self.og_msg.info.height = self.map_height
-        self.og_msg.info.origin.position.x = -self.map_width * self.resolution / 2
-        self.og_msg.info.origin.position.y = -self.map_height * self.resolution / 2
+        self.og_msg.info.origin.position.x = (-self.map_width * self.resolution / 2)+0.5
+        self.og_msg.info.origin.position.y = (-self.map_height * self.resolution / 2)+0.5
 
         #some thing that the pub needs for some reason
         # lol what
@@ -80,9 +80,9 @@ class LocalPlanner(Node):
         self.robot_y = msg.y
 
     def world_to_grid(self, x, y):
-        # we have to do this because grid and world coords are different
-        gx = int((x - self.og_msg.info.origin.position.x) / self.resolution)
-        gy = int((y - self.og_msg.info.origin.position.y) / self.resolution)
+        #gives coords, returns occupancy grid position
+        gx = int((x - self.og_msg.info.origin.position.x) / self.resolution+.5)
+        gy = int((y - self.og_msg.info.origin.position.y) / self.resolution+.5)
         if gx < 0 or gy < 0 or gx >= self.map_width or gy >= self.map_height:
             return None
         return gy * self.map_width + gx
@@ -185,6 +185,7 @@ class LocalPlanner(Node):
             self.publish_grid()
 
     def publish_grid(self):
+        #self.get_logger().info([int(v) for v in self.grid])
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
         self.og_msg.data = [int(v) for v in self.grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)
