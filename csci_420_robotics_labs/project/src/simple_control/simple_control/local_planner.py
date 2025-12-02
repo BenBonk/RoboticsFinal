@@ -70,9 +70,10 @@ class LocalPlanner(Node):
 
         self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
         self.print_occupancy_grid()
+        
         #PROOF WORLD TO GRID IS WRONG
-        goal_pos = self.world_to_grid(3.5,3.5)
-        self.occupancy_grid[goal_pos] = -3
+        #goal_pos = self.world_to_grid(3.5,3.5)
+        #self.occupancy_grid[goal_pos] = -3
 
     def transformed_goal_callback(self, msg):
         self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
@@ -84,8 +85,8 @@ class LocalPlanner(Node):
 
     def world_to_grid(self, x, y):
         #gives coords, returns occupancy grid position
-        gx = int((x - self.og_msg.info.origin.position.x) / self.resolution+.5)
-        gy = int((y - self.og_msg.info.origin.position.y) / self.resolution+.5)
+        gx = int((x - self.og_msg.info.origin.position.x) / self.resolution + 0.5)
+        gy = int((y - self.og_msg.info.origin.position.y) / self.resolution + 0.5)
         if gx < 0 or gy < 0 or gx >= self.map_width or gy >= self.map_height:
             return None
         return gy * self.map_width + gx
@@ -120,10 +121,25 @@ class LocalPlanner(Node):
         )
         noise = np.nanstd(readings, axis=1)
         
-        noise_sorted = np.sort(noise)
-        baseline = np.average(noise_sorted[:int(len(noise_sorted) * 0.3)])
+        # DEBUG: Log all noise values
+        self.get_logger().info(f"All noise values: {noise}")
         
-        door_readings = np.where(noise > 5 * baseline)[0]
+        noise_sorted = np.sort(noise)
+        baseline = np.median(noise_sorted[:int(len(noise_sorted) * 0.5)])
+        
+        self.get_logger().info(f"baseline: {baseline}")
+        self.get_logger().info(f"noise sorted: {noise_sorted}")
+        
+        # Try multiple thresholds
+        door_readings_3x = np.where(noise > 3 * baseline)[0]
+        door_readings_5x = np.where(noise > 5 * baseline)[0]
+        door_readings_10x = np.where(noise > 10 * baseline)[0]
+        
+        self.get_logger().info(f"door readings (3x): {door_readings_3x}")
+        self.get_logger().info(f"door readings (5x): {door_readings_5x}")
+        self.get_logger().info(f"door readings (10x): {door_readings_10x}")
+        
+        door_readings = door_readings_3x  # Use the 3x threshold
 
         angle = self.angle_min
         range_max = self.range_max
@@ -132,14 +148,14 @@ class LocalPlanner(Node):
             out_of_range = np.isinf(r)
             r = min(r, range_max)
 
-            hit_x = self.robot_x + (r+0.3) * np.cos(angle)
-            hit_y = self.robot_y + (r+0.3) * np.sin(angle)
+            hit_x = self.robot_x + (r+0.3) * np.sin(angle)
+            hit_y = self.robot_y + (r+0.3) * np.cos(angle)
 
             # Ray trace to mark free space
             incr = 0.2
             for sub in np.arange(0, r, incr):
-                px = self.robot_x + sub * np.cos(angle)
-                py = self.robot_y + sub * np.sin(angle)
+                px = self.robot_x + sub * np.sin(angle)
+                py = self.robot_y + sub * np.cos(angle)
                 idx = self.world_to_grid(px, py)
                 # Protect ALL special values (negative values)
                 if idx is not None and self.occupancy_grid[idx] >= 0:
@@ -161,12 +177,6 @@ class LocalPlanner(Node):
 
         self.publish_grid()
 
-    def mark_closed_door(self, x, y):
-        cell = self.world_to_grid(x, y)
-        if cell is not None:
-            self.occupancy_grid[cell] = -1
-            self.publish_grid()
-
     def mark_open_door(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
@@ -177,33 +187,18 @@ class LocalPlanner(Node):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.occupancy_grid[cell] = -3
-            self.get_logger().info(f"set goal at cell:{cell}")
+            #self.get_logger().info(f"set goal at cell:{cell}")
             self.publish_grid()
-
-    def array_to_grid(self,occupancy_grid):
-        #converts the occupancy grid to a 2d array
-        w = int(occupancy_grid.info.width)
-        h = int(occupancy_grid.info.height)
-        data = np.array(occupancy_grid.data, dtype=np.int8).reshape((h, w))
-        return data
-
-    #only needed if we want to change the rest of the implementation
-    def grid_to_array(self, grid):
-        flat = []
-        for r in range(self.map_height):
-            flat.extend(grid[r])
-
-        self.og_msg.data = [int(v) for v in flat]
-        return self.og_msg
 
     def print_occupancy_grid(self):
         h = self.map_height
         w = self.map_width
         arr = np.array(self.occupancy_grid, dtype=np.int8).reshape((h, w))
+        arr = np.rot90(arr)  # Rotate 90° counter-clockwise
         self.get_logger().info("\n" + np.array2string(arr))
 
     def publish_grid(self):
-        self.print_occupancy_grid()
+        #self.print_occupancy_grid()
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
         self.og_msg.data = [int(v) for v in self.occupancy_grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)

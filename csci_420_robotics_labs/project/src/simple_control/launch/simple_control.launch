@@ -13,4 +13,5 @@
     <param name="map_width" value="$(var map_width)" />
     <param name="map_height" value="$(var map_height)" />
   </node>
+<node pkg="simple_control" exec="key_manager" name="key_manager_node" output="screen" on_exit="shutdown"></node>
 </launch>
