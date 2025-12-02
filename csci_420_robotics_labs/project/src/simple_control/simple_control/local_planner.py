@@ -121,25 +121,11 @@ class LocalPlanner(Node):
         )
         noise = np.nanstd(readings, axis=1)
         
-        # DEBUG: Log all noise values
-        self.get_logger().info(f"All noise values: {noise}")
-        
         noise_sorted = np.sort(noise)
         baseline = np.median(noise_sorted[:int(len(noise_sorted) * 0.5)])
         
-        self.get_logger().info(f"baseline: {baseline}")
-        self.get_logger().info(f"noise sorted: {noise_sorted}")
-        
         # Try multiple thresholds
-        door_readings_3x = np.where(noise > 3 * baseline)[0]
-        door_readings_5x = np.where(noise > 5 * baseline)[0]
-        door_readings_10x = np.where(noise > 10 * baseline)[0]
-        
-        self.get_logger().info(f"door readings (3x): {door_readings_3x}")
-        self.get_logger().info(f"door readings (5x): {door_readings_5x}")
-        self.get_logger().info(f"door readings (10x): {door_readings_10x}")
-        
-        door_readings = door_readings_3x  # Use the 3x threshold
+        door_readings = np.where(noise > 3.4 * baseline)[0]
 
         angle = self.angle_min
         range_max = self.range_max
