@@ -122,15 +122,21 @@ class LocalPlanner(Node):
         noise = np.nanstd(readings, axis=1)
         
         noise_sorted = np.sort(noise)
-        baseline = np.median(noise_sorted[:int(len(noise_sorted) * 0.5)])
+        baseline = np.average(noise_sorted[:int(len(noise_sorted) * 0.3)])
         
         # Try multiple thresholds
-        door_readings = np.where(noise > 3.4 * baseline)[0]
+        door_readings = np.where(noise > 4 * baseline)[0]
 
         angle = self.angle_min
         range_max = self.range_max
 
+        allowed_ranges = [0,1,3,4,5,7,8,9,11,12,13,15]
+
         for n, r in enumerate(ranges):
+            if not n in allowed_ranges:
+                angle += self.angle_increment
+                continue
+
             out_of_range = np.isinf(r)
             r = min(r, range_max)
 
@@ -184,11 +190,11 @@ class LocalPlanner(Node):
         self.get_logger().info("\n" + np.array2string(arr))
 
     def publish_grid(self):
-        #self.print_occupancy_grid()
+        self.print_occupancy_grid()
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
         self.og_msg.data = [int(v) for v in self.occupancy_grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)
-        self.get_logger().info("publish grid")
+        #self.get_logger().info("publish grid")
     
 
     def mainloop(self):
