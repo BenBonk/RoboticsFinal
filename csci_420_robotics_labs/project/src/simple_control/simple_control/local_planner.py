@@ -122,7 +122,7 @@ class LocalPlanner(Node):
         noise = np.nanstd(readings, axis=1)
         
         noise_sorted = np.sort(noise)
-        baseline = np.average(noise_sorted[:int(len(noise_sorted) * 0.3)])
+        baseline = np.average(noise_sorted[:int(len(noise_sorted) * 0.5)])
         
         # Try multiple thresholds
         door_readings = np.where(noise > 4 * baseline)[0]
