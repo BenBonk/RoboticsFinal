@@ -7,8 +7,9 @@ from rclpy.node import Node
 from rclpy.executors import ExternalShutdownException
 
 from nav_msgs.msg import OccupancyGrid
-from sensor_msgs.msg import LaserScan, NavSatFix
-from geometry_msgs.msg import Vector3 
+from sensor_msgs.msg import LaserScan
+from geometry_msgs.msg import Vector3, PoseStamped
+from std_msgs.msg import Bool
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 
 class LocalPlanner(Node):
@@ -66,7 +67,9 @@ class LocalPlanner(Node):
 
         self.map_pub = self.create_publisher(OccupancyGrid, '/map', qos)
         self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 1)
-        self.gps_sub = self.create_subscription(Vector3, '/uav/sensors/gps', self.gps_callback, 5)
+        self.gps_sub = self.create_subscription(PoseStamped, '/uav/sensors/gps', self.gps_callback, 5)
+        self.at_waypoint_sub = self.create_subscription(Bool,'/reset_lidar',self.reset_lidar,1)
+
 
         self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
         self.print_occupancy_grid()
@@ -74,14 +77,26 @@ class LocalPlanner(Node):
         #PROOF WORLD TO GRID IS WRONG
         #goal_pos = self.world_to_grid(3.5,3.5)
         #self.occupancy_grid[goal_pos] = -3
+        self.reset_lidar_timer = self.create_timer(10.0, self.reset_lidar_periodic)
+
+    def reset_lidar_periodic(self):
+        self.get_logger().info("Periodic reset of lidar readings")
+        self.reset_lidar_readings()
 
     def transformed_goal_callback(self, msg):
-        self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
+        #self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
         self.mark_goal(msg.x, msg.y)
 
     def gps_callback(self, msg):
-        self.robot_x = msg.x
-        self.robot_y = msg.y
+        self.robot_x = msg.pose.position.y
+        self.robot_y = msg.pose.position.x
+        self.get_logger().info(f"robot x: {self.robot_x}")
+        self.get_logger().info(f"robot y: {self.robot_y}")
+
+    def reset_lidar(self, msg):
+        if msg.data:
+            self.get_logger().info("reset lidar!")
+            self.reset_lidar_readings()
 
     def world_to_grid(self, x, y):
         #gives coords, returns occupancy grid position
@@ -125,7 +140,7 @@ class LocalPlanner(Node):
         baseline = np.average(noise_sorted[:int(len(noise_sorted) * 0.5)])
         
         # Try multiple thresholds
-        door_readings = np.where(noise > 4 * baseline)[0]
+        door_readings = np.where(noise > 3 * baseline)[0]
 
         angle = self.angle_min
         range_max = self.range_max
@@ -160,7 +175,10 @@ class LocalPlanner(Node):
                 # Also protect special values here
                 if idx is not None and self.occupancy_grid[idx] >= 0:
                     if n in door_readings:  # door
-                        self.occupancy_grid[idx] = -1
+                        x = idx % self.map_width
+                        y = idx // self.map_width
+                        if (x+y)%2==1:
+                            self.occupancy_grid[idx] = -1
                     else:  # obstacle
                         current_val = self.occupancy_grid[idx]
                         self.occupancy_grid[idx] = 100 * 0.8 + current_val * 0.2
@@ -190,7 +208,7 @@ class LocalPlanner(Node):
         self.get_logger().info("\n" + np.array2string(arr))
 
     def publish_grid(self):
-        self.print_occupancy_grid()
+        #self.print_occupancy_grid()
         self.og_msg.header.stamp = self.get_clock().now().to_msg()
         self.og_msg.data = [int(v) for v in self.occupancy_grid] #need to convert to ints for publishing
         self.map_pub.publish(self.og_msg)

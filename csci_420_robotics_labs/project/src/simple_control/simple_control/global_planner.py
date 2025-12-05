@@ -28,6 +28,7 @@ class GlobalPlanner(Node):
         self.requested_position = self.create_subscription(Vector3, '/uav/input/goal', self.get_goal, 10)
         self.at_waypoint_sub = self.create_subscription(Bool, '/uav/sensors/at_waypoint', self.at_waypoint, 10)
 
+
         # Initialize class variables
         self.width = -1
         self.height = -1
@@ -62,7 +63,11 @@ class GlobalPlanner(Node):
         # Get the drone position
         self.origin_x = msg.info.origin.position.x
         self.origin_y = msg.info.origin.position.y
-        self.drone_position = [int(self.width + self.origin_x), int(self.height + self.origin_y)]
+        #self.drone_position = [int(self.width + self.origin_x)/2, int(self.height + self.origin_y)/2]
+        #LINE ABOVE IS INCORRECT, RETURNS (6,6)
+        self.drone_position = [0,0]
+
+
 
         # Get the map
         self.map = np.reshape(msg.data, (self.width, self.height))
