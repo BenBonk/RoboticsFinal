@@ -120,7 +120,7 @@ class AStarPlanner:
         # For all adjacent values
         for x_dim in range(-1, 2):
             for y_dim in range(-1, 2):
-                if not (x_dim == 0 and y_dim == 0):
+                if not (x_dim == 0 and y_dim == 0) and (x_dim * y_dim == 0):
                     ni, nj = pos[0] + x_dim, pos[1] + y_dim
                     if (0 <= ni < map_in.shape[0]) and (0 <= nj < map_in.shape[1]):
                         if map_in[ni][nj] == 0:

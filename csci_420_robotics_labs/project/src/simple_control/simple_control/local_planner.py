@@ -68,7 +68,7 @@ class LocalPlanner(Node):
         self.map_pub = self.create_publisher(OccupancyGrid, '/map', qos)
         self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 1)
         self.gps_sub = self.create_subscription(PoseStamped, '/uav/sensors/gps', self.gps_callback, 5)
-        self.reset_lida = self.create_subscription(Bool,'/reset_lidar',self.reset_lidar_callback,1)
+        self.reset_lidar_sub = self.create_subscription(Bool,'/reset_lidar',self.reset_lidar_callback,1)
 
 
         self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
@@ -164,7 +164,7 @@ class LocalPlanner(Node):
                 py = self.robot_y + sub * np.cos(angle)
                 idx = self.world_to_grid(px, py)
                 # Protect ALL special values (negative values)
-                if idx is not None and self.occupancy_grid[idx] >= 0:
+                if idx is not None:# and self.occupancy_grid[idx] >= 0:
                     v = self.occupancy_grid[idx]
                     self.occupancy_grid[idx] = 0 * 0.1 + v * 0.9
 
