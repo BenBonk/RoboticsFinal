@@ -13,6 +13,8 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from enum import Enum
 
+import time
+
 class States(Enum): 
     IDLE = 0
     EXPLORING_WORLD = 1
@@ -96,8 +98,10 @@ class RescueMission(Node):
             case States.MOVING_TO_WAYPOINT:
                 # drone is currently moving towards 'self.sent_position', 
                 # wait until it reaches there
-                threshold = 0.2
+                threshold = 0.1
+                self.get_logger().info(f"{self.drone_position} |||||| {self.sent_position}")
                 if math.dist(self.drone_position, self.sent_position) < threshold:
+                    time.sleep(3)
                     self.recieved_og = False
                     self.state = States.UPDATING_MAP
 

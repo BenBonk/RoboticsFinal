@@ -190,14 +190,14 @@ class LocalPlanner(Node):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.occupancy_grid[cell] = -2
-            self.publish_grid()
+            #self.publish_grid()
 
     def mark_goal(self, x, y):
         cell = self.world_to_grid(x, y)
         if cell is not None:
             self.occupancy_grid[cell] = -3
             #self.get_logger().info(f"set goal at cell:{cell}")
-            self.publish_grid()
+            #self.publish_grid()
 
     def print_occupancy_grid(self):
         h = self.map_height
