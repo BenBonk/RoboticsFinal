@@ -68,7 +68,7 @@ class LocalPlanner(Node):
         self.map_pub = self.create_publisher(OccupancyGrid, '/map', qos)
         self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 1)
         self.gps_sub = self.create_subscription(PoseStamped, '/uav/sensors/gps', self.gps_callback, 5)
-        self.at_waypoint_sub = self.create_subscription(Bool,'/reset_lidar',self.reset_lidar,1)
+        self.reset_lida = self.create_subscription(Bool,'/reset_lidar',self.reset_lidar_callback,1)
 
 
         self.get_logger().info(f"width: {self.map_width}, height: {self.map_height}")
@@ -81,7 +81,7 @@ class LocalPlanner(Node):
 
     def reset_lidar_periodic(self):
         self.get_logger().info("Periodic reset of lidar readings")
-        self.reset_lidar_readings()
+        #self.reset_lidar_readings()
 
     def transformed_goal_callback(self, msg):
         #self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")
@@ -90,10 +90,8 @@ class LocalPlanner(Node):
     def gps_callback(self, msg):
         self.robot_x = msg.pose.position.y
         self.robot_y = msg.pose.position.x
-        self.get_logger().info(f"robot x: {self.robot_x}")
-        self.get_logger().info(f"robot y: {self.robot_y}")
 
-    def reset_lidar(self, msg):
+    def reset_lidar_callback(self, msg):
         if msg.data:
             self.get_logger().info("reset lidar!")
             self.reset_lidar_readings()
@@ -145,8 +143,8 @@ class LocalPlanner(Node):
         angle = self.angle_min
         range_max = self.range_max
 
-        allowed_ranges = [0,1,3,4,5,7,8,9,11,12,13,15]
-
+        #allowed_ranges = [0,2,3,4,6,7,8,10,11,12,14,15]
+        allowed_ranges = [3,7,11,15]
         for n, r in enumerate(ranges):
             if not n in allowed_ranges:
                 angle += self.angle_increment
@@ -155,8 +153,8 @@ class LocalPlanner(Node):
             out_of_range = np.isinf(r)
             r = min(r, range_max)
 
-            hit_x = self.robot_x + (r+0.3) * np.sin(angle)
-            hit_y = self.robot_y + (r+0.3) * np.cos(angle)
+            hit_x = self.robot_x + (r+0.1) * np.sin(angle)
+            hit_y = self.robot_y + (r+0.1) * np.cos(angle)
 
             # Ray trace to mark free space
             incr = 0.2
