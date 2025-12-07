@@ -64,7 +64,6 @@ class LocalPlanner(Node):
             1
         )
         self.goal = None
-
         self.map_pub = self.create_publisher(OccupancyGrid, '/map', qos)
         self.scan_sub = self.create_subscription(LaserScan, '/uav/sensors/lidar', self.lidar_callback, 1)
         self.gps_sub = self.create_subscription(PoseStamped, '/uav/sensors/gps', self.gps_callback, 5)
@@ -164,7 +163,7 @@ class LocalPlanner(Node):
                 py = self.robot_y + sub * np.cos(angle)
                 idx = self.world_to_grid(px, py)
                 # Protect ALL special values (negative values)
-                if idx is not None:# and self.occupancy_grid[idx] >= 0:
+                if idx is not None and self.occupancy_grid[idx] != -3:
                     v = self.occupancy_grid[idx]
                     self.occupancy_grid[idx] = 0 * 0.1 + v * 0.9
 
@@ -177,6 +176,13 @@ class LocalPlanner(Node):
                         x = idx % self.map_width
                         y = idx // self.map_width
                         if (x+y)%2==1:
+                            self.get_logger().info(f"-----------------------------------------------------------------")
+                            self.get_logger().info(f"-----------------------------------------------------------------")
+                            self.get_logger().info(f"-----------------------------------------------------------------")
+                            self.get_logger().info(f"SET DOOR AT CELL: {idx}")
+                            self.get_logger().info(f"-----------------------------------------------------------------")
+                            self.get_logger().info(f"-----------------------------------------------------------------")
+                            self.get_logger().info(f"-----------------------------------------------------------------")
                             self.occupancy_grid[idx] = -1
                     else:  # obstacle
                         current_val = self.occupancy_grid[idx]

@@ -46,12 +46,14 @@ class RescueMission(Node):
         self.gps_sub = self.create_subscription(PoseStamped, '/uav/sensors/gps', self.gps_callback, 1)
         self.reset_lidar_pub = self.create_publisher(Bool, '/reset_lidar', 1)
         self.path_pub = self.create_publisher(Int32MultiArray, '/uav/path', 1)
+        self.final_path_pub = self.create_publisher(Int32MultiArray, '/uav/final_path', 1)
         self.p_path = Int32MultiArray()
         self.goal = None
         self.map = None
         self.drone_position = None
         self.sent_position = None
         self.recieved_og = False
+        self.start_position = None
         self.seen_pos = set()
 
         # Initial FSA state
@@ -108,26 +110,103 @@ class RescueMission(Node):
 
     def transformed_goal_callback(self, msg: Vector3):
         self.goal = [int(round(msg.x, 0)), int(round(msg.y, 0))]
-        self.get_logger().info(f'Recieved goal from tower to map: {self.goal}')
+        #self.get_logger().info(f'Recieved goal from tower to map: {self.goal}')
         #WE GOTTA UPDATE THE MAP TO MARK GOAL
 
     def mainloop(self):
         # FSA
-        self.get_logger().info(f"Current State: {self.state}")
+        #self.get_logger().info(f"Current State: {self.state}")
         match self.state:
             case States.IDLE:
                 # idle at start, wait until everything is initialized
-                if self.goal is not None and self.map is not None and self.drone_position is not None:
+                # Store original start position *one time only*
+
+                # Require all 3 before doing anything
+                if (
+                    self.goal is not None 
+                    and self.map is not None 
+                    and self.drone_position is not None
+                    and hasattr(self, "origin_x")  # <-- FIX
+                    and hasattr(self, "origin_y")
+                ):
+
+                    # Store original start position once
+                    if self.start_position is None:
+                        self.start_position = [
+                            int(round(self.drone_position[0])) - int(self.origin_x),
+                            int(round(self.drone_position[1])) - int(self.origin_y)
+                        ]
+                        self.get_logger().info(f"Stored start position: {self.start_position}")
+
                     self.state = States.UPDATING_MAP
+
             case States.MOVING_TO_WAYPOINT:
                 # drone is currently moving towards 'self.sent_position', 
                 # wait until it reaches there
                 threshold = 0.1
-                self.get_logger().info(f"{self.drone_position} |||||| {self.sent_position}")
+                #self.get_logger().info(f"{self.drone_position} |||||| {self.sent_position}")
                 if math.dist(self.drone_position, self.sent_position) < threshold:
                     processed_drone_position = (int(round(self.drone_position[0], 0) - self.origin_x),
                                             int(round(self.drone_position[1], 0) - self.origin_y))
                     
+                    processed_goal_position = (
+                        int(round(self.goal[0], 0) - self.origin_x),
+                        int(round(self.goal[1], 0) - self.origin_y)
+                    )
+
+                    # --- CHECK IF GOAL REACHED ---
+                    if processed_drone_position == processed_goal_position:
+
+                        self.get_logger().info("GOAL REACHED — computing TRUE SHORTEST PATH on full discovered map...")
+
+                        # Convert goal to grid coords
+                        gx = processed_goal_position[0]
+                        gy = processed_goal_position[1]
+
+                        # Start was saved earlier
+                        sx, sy = self.start_position
+
+                        # Prepare final processed map
+                        processed_map = np.where(self.map < 35, 0,
+                                            np.where(self.map <= 60, 0, 100))
+
+                        # ensure goal is walkable
+                        processed_map[gy, gx] = 0
+
+                        # Compute global optimal A* path
+                        astar = AStarPlanner(safe_distance=0)
+                        shortest_path = astar.plan(processed_map, (sx, sy), (gx, gy))
+
+                        if shortest_path is None:
+                            self.get_logger().error("could not compute the true shortest path")
+                            shortest_path = self.path.copy()
+                        else:
+                            self.get_logger().info("computed shortest path ")
+
+                        # Convert to world coordinates
+                        # Convert to numpy array (use float so adding origin works)
+                        shortest_path = np.array(shortest_path, dtype=float)
+
+                        # Add origin offsets (origin_x/origin_y may be floats)
+                        shortest_path[:, 0] += float(self.origin_x)
+                        shortest_path[:, 1] += float(self.origin_y)
+
+                        # Round & cast to integers for publishing as Int32MultiArray
+                        shortest_path = np.round(shortest_path).astype(np.int32)
+
+                        # Publish final path (flattened as ints)
+                        final_msg = Int32MultiArray()
+                        final_msg.data = shortest_path.reshape(-1).tolist()
+                        self.final_path_pub.publish(final_msg)
+
+
+                        self.get_logger().info("Published shortest path to /uav/final_path")
+
+                        # Finished
+                        rclpy.shutdown()
+                        return
+
+
                     if processed_drone_position not in self.seen_pos:
                         self.seen_pos.add(processed_drone_position)
 
@@ -156,14 +235,17 @@ class RescueMission(Node):
                 safe_distance = 0
                 astar = AStarPlanner(safe_distance=safe_distance)
                 # do some preprocessing on self.map
-                processed_map = np.where(self.map < 35, 0,
+                processed_map = np.where(self.map < 35, 0,  
                                     np.where(self.map <= 60, 0, 100))
 
-                processed_map[*self.goal] = 0 # idk astar says so
                 processed_drone_position = [int(round(self.drone_position[0], 0) - self.origin_x),
                                             int(round(self.drone_position[1], 0) - self.origin_y)]
                 processed_goal_position = [int(round(self.goal[0], 0) - self.origin_x),
                                             int(round(self.goal[1], 0) - self.origin_y)]
+                
+                gx = processed_goal_position[0]
+                gy = processed_goal_position[1]
+                processed_map[gy, gx] = 0
                 
                 self.get_logger().info(f"Position:{processed_drone_position}, Goal:{processed_goal_position}")
                 self.get_logger().info(f"{processed_map}")
@@ -184,8 +266,8 @@ class RescueMission(Node):
                     self.path_pub.publish(self.p_path)
 
                     self.sent_position = [int(self.path[1][0]), int(self.path[1][1])]
-                    self.get_logger().info(f"Moving to: {self.sent_position}")
-                    self.get_logger().info(f"PATH:")
+                    #self.get_logger().info(f"Moving to: {self.sent_position}")
+                    #self.get_logger().info(f"PATH:")
                     for pos in self.path:
                         self.get_logger().info(f"{pos}")
                     if self.map[int(self.sent_position[0]-self.origin_x), int(self.sent_position[1]-self.origin_y)] == -1:
