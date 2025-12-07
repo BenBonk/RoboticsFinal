@@ -80,8 +80,9 @@ class LocalPlanner(Node):
         self.reset_lidar_timer = self.create_timer(10.0, self.reset_lidar_periodic)
 
     def reset_lidar_periodic(self):
+        return
         self.get_logger().info("Periodic reset of lidar readings")
-        #self.reset_lidar_readings()
+        self.reset_lidar_readings()
 
     def transformed_goal_callback(self, msg):
         #self.get_logger().info(f"Recieved goal at: {msg.x},{msg.y}")

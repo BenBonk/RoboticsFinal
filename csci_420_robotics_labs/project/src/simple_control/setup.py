@@ -28,7 +28,6 @@ setup(
             'tower_to_map = simple_control.tower_to_map:main',
             'global_planner = simple_control.global_planner:main',
             'local_planner = simple_control.local_planner:main',
-            'key_manager = simple_control.key_manager:main',
         ],
     },
 )

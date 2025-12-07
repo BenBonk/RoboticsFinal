@@ -2,8 +2,8 @@
 import copy
 import math
 import numpy as np
-from simple_control.simple_control.global_planner import AStarPlanner
-from geometry_msgs.msg import Vector3
+#from simple_control.simple_control.global_planner import AStarPlanner
+from geometry_msgs.msg import Vector3, PoseStamped
 from std_msgs.msg import Int32MultiArray
 from std_msgs.msg import Bool
 from nav_msgs.msg import OccupancyGrid
@@ -35,14 +35,16 @@ class RescueMission(Node):
 
         # Tower goal subscriber to topic /uav/input/goal
         # will wait until something is published here
-        self.goal_sub = self.create_subscription(Vector3, '/uav/input/goal', self.transformed_goal_callback, 10)
-        self.position_pub = self.create_publisher(Vector3, '/uav/input/position_request', 1)
+        self.goal_sub = self.create_subscription(Vector3, '/uav/input/goal', self.transformed_goal_callback, 1)
+        self.position_pub = self.create_publisher(Vector3, '/uav/input/position', 1)
         self.map_sub = self.create_subscription(OccupancyGrid, '/map', self.get_map, qos)
-        self.gps_sub = self.create_subscription(Vector3, '/uav/sensors/gps', self.gps_callback, 10)
+        self.gps_sub = self.create_subscription(PoseStamped, '/uav/sensors/gps', self.gps_callback, 1)
+        self.reset_lidar_pub = self.create_publisher(Bool, '/reset_lidar', 1)
         self.goal = None
         self.map = None
         self.drone_position = None
         self.sent_position = None
+        self.recieved_og = False
 
         # Initial FSA state
         self.state = States.IDLE
@@ -64,9 +66,11 @@ class RescueMission(Node):
 
         # Get the map
         self.map = np.reshape(msg.data, (self.width, self.height))
+        self.recieved_og = True
 
     def gps_callback(self, msg):
-        self.drone_position = (msg.x, msg.y)
+        pos = msg.pose.position
+        self.drone_position = (pos.x, pos.y)
 
     # Goal callback
     def get_goal(self, msg):
@@ -83,6 +87,7 @@ class RescueMission(Node):
 
     def mainloop(self):
         # FSA
+        self.get_logger().info(f"Current State: {self.state}")
         match self.state:
             case States.IDLE:
                 # idle at start, wait until everything is initialized
@@ -93,15 +98,24 @@ class RescueMission(Node):
                 # wait until it reaches there
                 threshold = 0.2
                 if math.dist(self.drone_position, self.sent_position) < threshold:
+                    self.recieved_og = False
                     self.state = States.UPDATING_MAP
+
+                    msg = Bool()
+                    msg.data = True
+                    self.reset_lidar_pub.publish(msg)
+                    
             case States.UPDATING_MAP:
                 # wait until theres good confidence from local_planner for next move
-                '''
-                pseudocode:
-                    - check surrounding tiles and make sure theyre either special tiles
-                      or < 0.2 or > 0.8
-                    - if surrounding tiles are all valid, do 'self.state=States.PATHFINDING'
-                '''
+                if self.recieved_og:
+                    msg = Vector3()
+                    msg.x = float(int(self.drone_position[0]))
+                    msg.y = float(int(self.drone_position[1]+1))
+                    msg.z = float(3.0)
+                    self.position_pub.publish(msg)
+                    self.state = States.MOVING_TO_WAYPOINT
+                    self.sent_position = (msg.x, msg.y)
+
             case States.PATHFINDING:
                 # path towards dog
                 self.get_logger().info('Planning path')
@@ -140,49 +154,6 @@ class RescueMission(Node):
                     - if yes, do 'self.state=States.PATHFINDING'
                 '''
             
-
-        # If you dont have a plan wait for a map, current position, and a goal
-        if not self.have_plan:
-            # If we have received the data
-            if (len(self.map) != 0) and (len(self.drone_position) == 2) and (len(self.goal_position) == 2):
-                self.get_logger().info('Planning path')
-                # TODO Update to use a launch parameter instead of static value
-                safe_distance_params = 'safe_distance'
-                self.declare_parameter(safe_distance_params, 1)
-                safe_distance = self.get_parameter(safe_distance_params).get_parameter_value().integer_value
-                astar = AStarPlanner(safe_distance=safe_distance)
-                self.path = astar.plan(self.map, self.drone_position, self.goal_position)
-                if self.path is not None:
-                    self.path = np.array(self.path)
-                    self.have_plan = True
-                    self.path[:, 0] = self.path[:, 0] + self.origin_x
-                    self.path[:, 1] = self.path[:, 1] + self.origin_y
-                    self.get_logger().info(f'Executing path: {self.path}')
-                else:
-                    self.get_logger().info('Path not found, try another goal')
-        else: # We have a plan, execute it
-            # Publish the path
-            if len(self.p_path.data) != len(np.reshape(self.path,-1)):
-                self.p_path.data = np.reshape(self.path,-1)
-                self.path_pub.publish(self.p_path)
-
-            # Publish the current waypoint
-            if self.at_waypoint == False or self.sent_position == False or np.shape(self.path)[0] < 0:
-                msg = Vector3()
-                msg.x = float(self.path[0][0])
-                msg.y = float(self.path[0][1])
-                msg.z = float(3)
-                self.position_pub.publish(msg)
-                self.sent_position = True
-            else:
-                self.path = self.path[1:]
-                self.sent_position = False
-
-            # If we are done wait for next goal
-            if np.shape(self.path)[0] <= 0 and self.at_waypoint:
-                self.have_plan = False
-                self.drone_position = copy.deepcopy(self.goal_position)
-                self.goal_position = []
 
     def transformed_goal_callback(self, msg: Vector3):
         self.goal = msg

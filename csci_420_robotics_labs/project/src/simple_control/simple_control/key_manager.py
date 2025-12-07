@@ -18,14 +18,14 @@ class KeyManager(Node):
     # Node initialization
     def __init__(self):
         super().__init__('key_manager')
-        time.sleep(10)
+        #time.sleep(10)
 
         # key stuff
         self.keys_remaining = 4
         self.get_keys_sub = self.create_subscription(Int32, '/keys_remaining',self.get_keys_remaining, 1)
         self.use_key_client = self.create_client(UseKey, 'use_key')
 
-        self.use_key(1, 0)
+        #self.use_key(1, 0)
 
 
         self.rate = 20
